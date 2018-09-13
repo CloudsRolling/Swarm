@@ -1,0 +1,67 @@
+#故障转移 Failover
+
+#当其中一个节点关闭宕机时，其节点中的service会转移到另一个节点上。
+Swarm会检测到node1发生故障并把此故障节点的状态标记为Down; docker node ls 可查看 node1的STATUS 为Down
+同时 Swarm会把node1上的service调度到其它有资源的节点上来运行；docker service ps web_server 可查看其过程和状态
+
+#访问server
+
+#便于分析，重新部署一个
+ docker service create --name=htdocs_nginx --replicas=3 nginx
+ docker service ps htdocs_nginx 可查看副本数
+ --replicas可直接指定副本数 ，不需要再用docker scale命令
+
+#现在我们要访问server
+在以上操作中，我们每个节点都有运行service, node1、node2、node3  容器里是监听80端口的，但我们并没有映射端口到Host,所以要进行以下操作
+
+#进入容器查看：
+ docker exec  容器ID /bin/sh 也可使用 /bin/bash
+ 容器IP 为172.12.0.5， 实际上连接的是Docker的bridge网络
+ crul 172.12.0.5 可以访问
+ 但是这是在容器内部，需要实现在外部也可访问，也就时暴露80端口
+ 
+#外部访问
+ docker service update --publish-add 80:80 htdocs_nginx
+ 这样就映射端口了，外部也可访问。
+ 当然新建service时也可直接指定
+  docker service create --name htdocs_nginx --replicas=3 --publish-add 80:80 nginx
+ 
+ 
+#routing mesh
+ 我们访问每个节点的80端口都可以返回结果； swarm 内部的 load balancer 会将请求转发给 web_server 其中的一个副本。这就是 routing mesh 的作用。
+ 
+ 注：当我们使用 --publish-add 80:80 时 swarm会重新配置副本，容器内的网络就会发生改变
+ 器的网络与 --publish-add 之前已经大不一样了，现在有两块网卡，每块网卡连接不同的 Docker 网络。
+ 实际上：
+
+   eth0 连接的是一个 overlay 类型的网络，名字为 ingress，其作用是让运行在不同主机上的容器可以相互通信。
+
+   eth1 连接的是一个 bridge 类型的网络，名字为 docker_gwbridge，其作用是让容器能够访问到外网。
+   
+   ingress 网络是 swarm 创建时 Docker 为自动我们创建的，swarm 中的每个 node 都能使用 ingress。
+   通过 overlay 网络，主机与容器、容器与容器之间可以相互访问；同时，routing mesh 将外部请求路由到不同主机的容器，
+   从而实现了外部网络对 service 的访问。
+   
+#service与service通信  内部的
+为了不暴露端口 增加安全性 ，我们可以用一下方法：
+服务发现：
+如果不 publish，那么 swarm 就要提供一种机制，能够：
+让 service 通过简单的方法访问到其他 service。
+当 service 副本的 IP 发生变化时，不会影响访问该 service 的其他 service。
+当 service 的副本数发生变化时，不会影响访问该 service 的其他 service。
+这其实就是服务发现（service discovery）。Docker Swarm 原生就提供了这项功能，通过服务发现，
+service 的使用者不需要知道 service 运行在哪里，IP 是多少，有多少个副本，就能与 service 通信。
+
+#创建overlay网络
+docker network create --driver overlay app_net
+docker network ls
+
+#部署
+docker service create --name my_web --replicas=5 --network app_net nginx
+docker service create --name database --network app_net mysql
+
+docker service ps  database 查看容器 然后进入容器
+docke exec 容器ID /bin/sh   ping  my_web  发现可通 
+同时ping所得到的my_webIP是VIP 虚拟IP ，swarm 会将对 VIP 的访问负载均衡到每一个副本。
+
+

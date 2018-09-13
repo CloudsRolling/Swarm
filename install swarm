@@ -1,0 +1,19 @@
+swarm-manager 是 manager node，swarm-worker是 worker node。
+所有节点的 Docker 版本均不低于 v1.12。
+在master上 docker swarm init --advertise-addr  172.17.244.170 
+--advertise-addr 指定与其他 node 通信的地址。
+
+docker swarm init 输出告诉我们：
+
+① swarm 创建成功，swarm-manager 成为 manager node。
+
+② 添加 worker node 需要执行的命令。
+
+③ 添加 manager node 需要执行的命令。
+
+执行docker node ls 查看当前swarm的node 
+
+在work-node上执行命令：
+docker swarm join --token xxxxxxxxxxxxxxx 172.17.244.170
+就会显示当前的swarm-manager和swarm-worker;  可以通过 docker swarm join-token worker 查看token
+

@@ -1,0 +1,19 @@
+#滚动更新
+创建服务：
+  docker service create --name my_web --replicas=5 nginx:1.12
+更新为1.14
+  docker service update --image nginx:1.14 my_web 
+  
+默认配置下，Swarm 一次只更新一个副本，并且两个副本之间没有等待时间。
+我们可以通过 --update-parallelism 设置并行更新的副本数目，
+通过 --update-delay 指定滚动更新的间隔时间。  
+
+docker service update --replicas 6 --update-parallelism 2 --update-delay 1m my_web
+service 增加到六个副本，每次更新两个副本，间隔时间一分钟。
+
+#回滚
+docker service update --rollback my_web
+请注意，--rollback 只能回滚到上一次执行 docker service update 之前的状态，并不能无限制地回滚。
+
+
+

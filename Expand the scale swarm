@@ -1,0 +1,34 @@
+#创建好了swarm集群后，我们可以部署一个httpd应用来了解工作情况；
+#执行以下命令来部署应用：
+ docker service create --name web_server httpd
+ --name 为server名字   httpd为镜像名称
+ 
+#执行以下命令来查看swarm集群中的应用：
+ docker service ls
+  REPLICAS 显示副本信息，此处是1；0/1 表示副本数为1，但服务还没启动起来。
+  
+#执行以下命令查看详情：
+  dokcer service ps web_server 
+  DESIRED STATE 为Running 表示启动成功   CURRENT STATE 为Running有时间段 表示已在运行
+ 
+#负载均衡
+#增加service副本数：
+ docker service scale web_server=5
+ 表示副本数增加到5个 docker service ls 可以查看副本数   docker service ps web_server
+ 可以查看服务运行状态，此时httpd服务为5个，分布在各个swarm-manager和swarm-work节点上
+ 
+ --不在swarm-manager上运行server
+ docker node update --availability drain swarm-manager
+ docker node ls 可查看集群状况 会发现swarm-manager的AVAILBILITY状态为Drain 说明此节点不参与负载工作
+ docker service ps web_server 可发现swarm-manager不再运行service，本在swarm-manager上运行的
+ service会关闭并分配到其它节点运行从而达到使用者的预期效果，service副本数还是5个
+
+#减少service副本数：
+ docker service scale web_server=3
+  表示副本数减少为5个 docker service ls 可以查看副本数   docker service ps web_server
+  可以查看服务运行状态，
+  
+ 以上就是swarm集群中的service扩展与收缩；  与kubernetes大同小异，kubernetes中在yaml文件中的replicas参数可指定副本数
+ 
+ 
+

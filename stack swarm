@@ -1,0 +1,84 @@
+什么是 stack ？
+例如：
+首先创建 secret。
+
+然后创建 MySQL service，这是 WordPress 依赖的服务。
+
+最后创建 WordPress service。
+
+也就是说，这个应用包含了两个 service：MySQL 和 WordPress，它们之间有明确的依赖关系，必须先启动 MySQL。
+
+为了保证这个依赖关系，我们控制了 docker secret 和 docker service 命令的执行顺序，只不过这个过程是手工完成的。
+
+假如我们需要频繁地在不同环境中部署 WordPress 应用，如果每次都手工执行效率就太低了，而且容易出错。这是自动化的一个好机会，首先我们能想到的就是把这个过程写成脚本，大概内容如下：
+
+稍微复杂一点的是第三步，通过 if 判断 MySQL service 是否运行，如果是，则运行 WordPress service，否则通过 while 继续等待，直到 MySQL 运行。
+
+脚本大体上能够工作，实现了自动化，但有两个缺点：
+
+目前只有两个 service，还比较简单。现在的应用通常都包含多个 service，特别是采用 microservices 架构的应用，几十个 service 是很正常的。用 shell 脚本启动和管理如此多的 service 将是一件非常有挑战的任务。
+
+用 while 和 if 维护 service 之间的依赖关系也是很有挑战的，容易出错。而且如何判断 service 正常运行也不是件容易的事，脚本中只简单检查了 service 是否存在，并没有考虑 service 的实际运行状态。
+
+我们希望有一种更高效和可靠的方法来部署基于 service 的应用，这就是 stack。
+
+stack 包含一系列 service，这些 service 组成了应用。stack 通过一个 YAML 文件定义每个 service，并描述 service 使用的资源和各种依赖。
+
+WordPress 的 stack 版本
+如果将前面 WordPress 用 stack 来定义，YAML 文件可以是这样：
+
+version: '3.1'
+
+services:
+  db:
+    image: mysql:lastet
+    volumes:
+      - db_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_root_password
+      - db_password
+
+  wordpress:
+    depends_on:
+      - db
+    image: wordpress:latest
+    ports:
+      - "8000:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+secrets:
+  db_password:
+    file: db_password.txt
+  db_root_password:
+    file:db_root_password.txt
+volumes:
+  db_data:
+
+YAML 是一种阅读性很强的文本格式，上面这个 stack 中定义了三种资源：service、secret 和 volume。
+
+① services 定义了两个 service：db 和 wordpress。
+
+② secrets 定义了两个 secret：db_password 和 db_root_password，在 service db 和 wordpress 的定义中引用了这两个 secret。
+
+③ volumes 定义了一个 volume：db_data，service db 使用了此 volume。
+
+④ wordpress 通过 depends_on 指定自己依赖 db 这个 service。Docker 会保证当 db 正常运行后再启动 wordpress。
+
+可以在 YAML 中定义的元素远远不止这里看到的这几个，完整列表和使用方法可参考文档 https://docs.docker.com/compose/compose-file/ 
+
+然后:
+ docker stack deploy -c wordpress.yml wpstack 来创建资源
+ docker stack services wpstack
+ docker stack ps wpstack
+ docker secret ls
+ 如果想修改yaml文件，修改过后  可docker stack deploy -c wordpress.yml wpstack 来更新
+ docker stack rm wpstack 删除
