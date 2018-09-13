@@ -1,0 +1,22 @@
+步骤1，在Swarm集群中创建一个新的覆盖网络：
+$ docker network create --driver overlay --attachable portainer_agent_network
+
+步骤2，将代理部署为集群中的全局服务：
+$ docker service create \
+    --name portainer_agent \
+    --network portainer_agent_network \
+    -e AGENT_CLUSTER_ADDR=tasks.portainer_agent \
+    --mode global \
+    --constraint 'node.platform.os == linux' \
+    --mount type=bind,src=//var/run/docker.sock,dst=/var/run/docker.sock \
+    --mount type=bind,src=//var/lib/docker/volumes,dst=/var/lib/docker/volumes \
+    portainer/agent
+
+步骤3，将Portainer实例部署为服务：
+$ docker service create \
+    --name portainer \
+    --network portainer_agent_network \
+    --publish 9000:9000 \
+    --replicas=1 \
+    --constraint 'node.role == manager' \
+    portainer/portainer -H "tcp://tasks.portainer_agent:9001" --tlsskipverify
